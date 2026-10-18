@@ -89,19 +89,6 @@ Open [http://localhost:8000](http://localhost:8000) in any modern web browser (G
 
 This project is 100% static and pre-configured for instant zero-configuration deployment on Netlify:
 
-### Method A: Netlify Git Continuous Deployment (Recommended)
-1. Push this repository to your GitHub account.
-2. Log in to [Netlify](https://www.netlify.com/) and click **"Add new site" ➔ "Import an existing project"**.
-3. Select your GitHub repository.
-4. Leave **Build command** and **Publish directory** blank (root directory is served automatically).
-5. Click **"Deploy site"**. Your simulation will be live with a secure HTTPS URL!
-
-### Method B: Netlify Drop (Manual)
-1. Go to [Netlify Drop](https://app.netlify.com/drop).
-2. Drag and drop the `TollBoothSimulator` folder into the browser window.
-3. Your application is instantly deployed in seconds.
-
----
 
 ## ⚠️ Simulation Assumptions & Academic Limitations
 

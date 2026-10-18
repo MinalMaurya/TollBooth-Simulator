@@ -1,0 +1,2704 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TollBooth Operations & Traffic Simulation System</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg-body: #f1f5f9;
+      --bg-panel: #ffffff;
+      --bg-surface: #ffffff;
+      --bg-surface-alt: #f8fafc;
+      --border-color: #e2e8f0;
+      --border-focus: #2563eb;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --text-dim: #94a3b8;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-glow: rgba(37, 99, 235, 0.2);
+      --success: #059669;
+      --success-glow: rgba(5, 150, 105, 0.2);
+      --warning: #d97706;
+      --warning-glow: rgba(217, 119, 6, 0.2);
+      --danger: #dc2626;
+      --danger-glow: rgba(220, 38, 38, 0.2);
+      --emergency: #e11d48;
+      --exempt: #7c3aed;
+      --card-radius: 12px;
+      --btn-radius: 8px;
+      --transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; width: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Helvetica Neue", sans-serif; background: var(--bg-body); color: var(--text-main); overflow: hidden; -webkit-font-smoothing: antialiased; }
+
+    /* App Shell Layout */
+    #app {
+      --map-width: 54%;
+      display: grid;
+      grid-template-columns: minmax(320px, var(--map-width)) 8px minmax(380px, 1fr);
+      height: 100vh;
+      width: 100vw;
+      background: var(--bg-body);
+      overflow: hidden;
+    }
+
+    /* Map Pane */
+    #mapPane {
+      position: relative;
+      height: 100%;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      background: #e2e8f0;
+    }
+    #map {
+      flex: 1;
+      height: 100%;
+      width: 100%;
+      background: #dfe8e2;
+    }
+
+    /* Map Overlays */
+    .map-header-bar {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      right: 14px;
+      z-index: 500;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      pointer-events: none;
+    }
+    .map-header-bar > * { pointer-events: auto; }
+
+    .map-plaza-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(8px);
+      border: 1px solid #cbd5e1;
+      border-radius: 999px;
+      box-shadow: 0 4px 16px rgba(15, 23, 42, 0.1), 0 1px 3px rgba(15, 23, 42, 0.05);
+      font-size: 13px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .map-plaza-badge .pulse-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--success);
+      box-shadow: 0 0 10px var(--success);
+      animation: pulseAnim 2s infinite;
+    }
+
+    .map-quick-tools {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .map-tool-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(8px);
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      color: #1e293b;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+      transition: var(--transition);
+    }
+    .map-tool-btn:hover {
+      background: #f8fafc;
+      border-color: #94a3b8;
+      color: #0f172a;
+    }
+    .map-tool-btn.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #ffffff;
+      box-shadow: 0 2px 10px var(--primary-glow);
+    }
+
+    .map-legend-bar {
+      position: absolute;
+      bottom: 14px;
+      left: 14px;
+      right: 14px;
+      z-index: 500;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 6px;
+      padding: 8px 12px;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(8px);
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      overflow-x: auto;
+      box-shadow: 0 4px 16px rgba(15, 23, 42, 0.1);
+      pointer-events: auto;
+      scrollbar-width: thin;
+    }
+    .map-legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      font-size: 11px;
+      color: #334155;
+      white-space: nowrap;
+    }
+    .map-legend-item span.icon { font-size: 13px; }
+
+    /* Resize Handle */
+    #resizeHandle {
+      position: relative;
+      z-index: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #e2e8f0;
+      cursor: col-resize;
+      transition: background 0.15s;
+      user-select: none;
+      touch-action: none;
+    }
+    #resizeHandle::after {
+      content: "";
+      width: 4px;
+      height: 48px;
+      border-radius: 2px;
+      background: #94a3b8;
+      transition: background 0.15s;
+    }
+    #resizeHandle:hover, #resizeHandle:focus {
+      background: #cbd5e1;
+      outline: none;
+    }
+    #resizeHandle:hover::after, #resizeHandle:focus::after {
+      background: var(--primary);
+    }
+
+    /* Dashboard Panel */
+    #panel {
+      position: relative;
+      height: 100%;
+      min-width: 0;
+      background: var(--bg-panel);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-left: 1px solid var(--border-color);
+    }
+
+    /* Panel Header */
+    .dashboard-header {
+      padding: 16px 20px 14px;
+      background: #ffffff;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    .header-top-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .brand-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 9px;
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      color: #fff;
+      box-shadow: 0 2px 10px var(--primary-glow);
+    }
+    .brand-title h1 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #0f172a;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+    }
+    .brand-title p {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    /* Status Pill */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      border: 1px solid transparent;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+    }
+    .status-badge.ready {
+      background: #ecfdf5;
+      border-color: #a7f3d0;
+      color: #047857;
+    }
+    .status-badge.running {
+      background: #fffbeb;
+      border-color: #fde68a;
+      color: #b45309;
+      animation: pulseGlow 1.5s infinite;
+    }
+    .status-badge.paused {
+      background: #eff6ff;
+      border-color: #bfdbfe;
+      color: #1d4ed8;
+    }
+    .status-badge.completed {
+      background: #f5f3ff;
+      border-color: #ddd6fe;
+      color: #6d28d9;
+    }
+
+    /* Simulation Control Action Bar */
+    .sim-action-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .action-group-primary {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .action-group-secondary {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    /* Button System */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border: 1px solid #cbd5e1;
+      background: #ffffff;
+      color: #1e293b;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: var(--btn-radius);
+      cursor: pointer;
+      transition: var(--transition);
+      white-space: nowrap;
+      text-decoration: none;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+    .btn:hover:not(:disabled) {
+      background: #f8fafc;
+      border-color: #94a3b8;
+      color: #0f172a;
+      transform: translateY(-1px);
+    }
+    .btn:active:not(:disabled) {
+      transform: translateY(0);
+    }
+    .btn:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      filter: grayscale(0.5);
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+      box-shadow: 0 2px 8px var(--primary-glow);
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: var(--primary-hover);
+      border-color: var(--primary-hover);
+      color: #fff;
+      box-shadow: 0 4px 12px var(--primary-glow);
+    }
+
+    .btn-success {
+      background: #059669;
+      border-color: #059669;
+      color: #fff;
+      box-shadow: 0 2px 8px var(--success-glow);
+    }
+    .btn-success:hover:not(:disabled) {
+      background: #047857;
+      border-color: #047857;
+      color: #fff;
+    }
+
+    .btn-danger {
+      background: #fef2f2;
+      border-color: #fecaca;
+      color: #b91c1c;
+    }
+    .btn-danger:hover:not(:disabled) {
+      background: #fee2e2;
+      border-color: #f87171;
+      color: #991b1b;
+    }
+
+    .btn-sm {
+      padding: 5px 10px;
+      font-size: 11px;
+    }
+
+    /* Simulation Progress Bar */
+    .progress-container {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      width: 100%;
+    }
+    .progress-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+      font-weight: 500;
+    }
+    .progress-track {
+      width: 100%;
+      height: 6px;
+      border-radius: 999px;
+      background: #e2e8f0;
+      overflow: hidden;
+      border: 1px solid #cbd5e1;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #2563eb, #059669);
+      border-radius: 999px;
+      transition: width 0.15s ease-out;
+    }
+
+    /* Scrollable Content Body */
+    .dashboard-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      background: #f8fafc;
+      scrollbar-width: thin;
+      scrollbar-color: #cbd5e1 transparent;
+    }
+
+    /* Section Headers */
+    .section-title-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #1e293b;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .section-title::before {
+      content: "";
+      width: 3px;
+      height: 14px;
+      background: var(--primary);
+      border-radius: 2px;
+    }
+
+    /* KPI Metric Cards */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+    .kpi-card {
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      border-radius: var(--card-radius);
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      transition: var(--transition);
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    }
+    .kpi-card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--kpi-accent, var(--primary));
+    }
+    .kpi-card:hover {
+      border-color: #cbd5e1;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+    }
+    .kpi-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .kpi-value {
+      font-size: 20px;
+      font-weight: 800;
+      color: #0f172a;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.2;
+    }
+    .kpi-sub {
+      font-size: 10.5px;
+      color: var(--text-dim);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    /* Live 6-Lane Plaza Monitor */
+    .lanes-monitor-container {
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      border-radius: var(--card-radius);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    }
+    .carriageways-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .carriageway-column {
+      background: #f8fafc;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .carriageway-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--border-color);
+      font-size: 11px;
+      font-weight: 700;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .carriageway-header .badge {
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-size: 10px;
+      background: #e2e8f0;
+      color: #334155;
+      font-weight: 700;
+    }
+
+    .lane-box {
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      transition: var(--transition);
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+    }
+    .lane-box.processing {
+      border-color: #f59e0b;
+      background: #fffbeb;
+    }
+    .lane-box.clearing {
+      border-color: #10b981;
+      background: #ecfdf5;
+    }
+    .lane-top-info {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .lane-title {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .lane-state-pill {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .lane-state-pill.idle {
+      background: #f1f5f9;
+      color: #64748b;
+    }
+    .lane-state-pill.serving {
+      background: #fef3c7;
+      color: #92400e;
+    }
+    .lane-state-pill.clear {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .lane-queue-strip {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      min-height: 22px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      padding: 2px 0;
+    }
+    .lane-queue-strip::-webkit-scrollbar { display: none; }
+    .queue-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 6px;
+      background: #f8fafc;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      font-size: 10.5px;
+      font-weight: 600;
+      color: #1e293b;
+      white-space: nowrap;
+    }
+    .queue-chip.booth-current {
+      border-color: #f59e0b;
+      background: #fef3c7;
+      color: #92400e;
+    }
+    .queue-empty-text {
+      font-size: 10px;
+      color: var(--text-dim);
+      font-style: italic;
+    }
+
+    /* Configuration Panel (Collapsible Card) */
+    .config-card {
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      border-radius: var(--card-radius);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    }
+    .config-presets-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .preset-chip {
+      padding: 5px 10px;
+      background: #f8fafc;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #475569;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    .preset-chip:hover {
+      background: #f1f5f9;
+      color: #0f172a;
+      border-color: #cbd5e1;
+    }
+    .preset-chip.active {
+      background: #eff6ff;
+      border-color: var(--primary);
+      color: #1d4ed8;
+      font-weight: 700;
+    }
+
+    .config-fields-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .form-group label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #475569;
+      display: flex;
+      justify-content: space-between;
+    }
+    .form-control {
+      width: 100%;
+      padding: 8px 10px;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      color: #0f172a;
+      font-family: inherit;
+      font-size: 12px;
+      transition: var(--transition);
+    }
+    .form-control:focus {
+      outline: none;
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px var(--primary-glow);
+    }
+    .form-control.error {
+      border-color: var(--danger);
+      background: #fef2f2;
+    }
+    .form-error-msg {
+      font-size: 10px;
+      color: #dc2626;
+      display: none;
+    }
+    .form-error-msg.visible {
+      display: block;
+    }
+
+    /* Advanced Configuration Toggle */
+    .collapsible-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 0;
+      transition: var(--transition);
+    }
+    .collapsible-toggle:hover {
+      color: #0f172a;
+    }
+    .advanced-settings-box {
+      display: none;
+      padding-top: 10px;
+      border-top: 1px dashed var(--border-color);
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+    .advanced-settings-box.open {
+      display: grid;
+    }
+
+    /* Results & Audit Hub (Tabs) */
+    .results-card {
+      background: #ffffff;
+      border: 1px solid var(--border-color);
+      border-radius: var(--card-radius);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    }
+    .tabs-nav {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 8px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .tab-btn {
+      padding: 6px 12px;
+      border-radius: 6px;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: var(--transition);
+      white-space: nowrap;
+    }
+    .tab-btn:hover {
+      color: #0f172a;
+      background: #f1f5f9;
+    }
+    .tab-btn.active {
+      color: #fff;
+      background: var(--primary);
+    }
+
+    .tab-pane {
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .tab-pane.active {
+      display: flex;
+    }
+
+    /* Filter Bar for Audit Table */
+    .audit-filter-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .filter-chips-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+    .filter-chip {
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: #f8fafc;
+      border: 1px solid var(--border-color);
+      font-size: 10.5px;
+      font-weight: 600;
+      color: #475569;
+      cursor: pointer;
+      transition: var(--transition);
+    }
+    .filter-chip:hover {
+      background: #f1f5f9;
+      color: #0f172a;
+    }
+    .filter-chip.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+
+    .search-input-box {
+      position: relative;
+      min-width: 160px;
+    }
+    .search-input-box input {
+      width: 100%;
+      padding: 5px 10px 5px 26px;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      color: #0f172a;
+      font-size: 11px;
+    }
+    .search-input-box input:focus {
+      outline: none;
+      border-color: var(--border-focus);
+    }
+    .search-input-box::before {
+      content: "🔍";
+      position: absolute;
+      left: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 10px;
+      opacity: 0.6;
+    }
+
+    /* Tables */
+    .table-container {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      background: #ffffff;
+      max-height: 380px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11.5px;
+      text-align: left;
+      color: #1e293b;
+    }
+    th, td {
+      padding: 7px 10px;
+      border-bottom: 1px solid #f1f5f9;
+      white-space: nowrap;
+    }
+    th {
+      position: sticky;
+      top: 0;
+      background: #f8fafc;
+      color: #475569;
+      font-weight: 700;
+      font-size: 10.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-bottom: 1px solid var(--border-color);
+      z-index: 2;
+    }
+    tbody tr:hover {
+      background: #f8fafc;
+    }
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    /* Badges & Outcomes */
+    .outcome-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 10.5px;
+      font-weight: 700;
+    }
+    .outcome-paid {
+      background: #ecfdf5;
+      color: #047857;
+      border: 1px solid #a7f3d0;
+    }
+    .outcome-free {
+      background: #eff6ff;
+      color: #1d4ed8;
+      border: 1px solid #bfdbfe;
+    }
+    .outcome-exempt {
+      background: #f5f3ff;
+      color: #6d28d9;
+      border: 1px solid #ddd6fe;
+    }
+    .outcome-fined {
+      background: #fef2f2;
+      color: #b91c1c;
+      border: 1px solid #fecaca;
+    }
+
+    /* Completion Alert Banner */
+    .completion-banner {
+      display: none;
+      padding: 12px 14px;
+      background: #ecfdf5;
+      border: 1px solid #a7f3d0;
+      border-radius: 8px;
+      color: #065f46;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .completion-banner.visible {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    /* Mobile segmented control (hidden on desktop) */
+    .mobile-view-tabs {
+      display: none;
+    }
+
+    /* Leaflet Simulation Marker Styling */
+    .sim-marker-icon {
+      background: transparent;
+      border: 0;
+    }
+    .sim-marker-vehicle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      background: #ffffff;
+      border: 2px solid var(--v-color, #2563eb);
+      border-radius: 50%;
+      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.2);
+      font-size: 15px;
+      color: #0f172a;
+      transition: transform 0.1s ease;
+      cursor: pointer;
+    }
+    .sim-marker-vehicle.emergency {
+      animation: emergencyPulse 1.2s infinite;
+    }
+    .sim-marker-booth {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 26px;
+      background: #ffffff;
+      border: 2px solid #334155;
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18);
+      color: #0f172a;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+    .sim-marker-booth .led-status {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      margin-top: 1px;
+      background: #94a3b8;
+    }
+    .sim-marker-booth.serving {
+      border-color: #f59e0b;
+    }
+    .sim-marker-booth.serving .led-status {
+      background: #f59e0b;
+      box-shadow: 0 0 6px #f59e0b;
+    }
+    .sim-marker-booth.clear {
+      border-color: #10b981;
+    }
+    .sim-marker-booth.clear .led-status {
+      background: #10b981;
+      box-shadow: 0 0 6px #10b981;
+    }
+
+    /* Animations */
+    @keyframes pulseAnim {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.15); opacity: 1; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+    @keyframes pulseGlow {
+      0% { box-shadow: 0 0 4px rgba(245, 158, 11, 0.2); }
+      50% { box-shadow: 0 0 10px rgba(245, 158, 11, 0.4); }
+      100% { box-shadow: 0 0 4px rgba(245, 158, 11, 0.2); }
+    }
+    @keyframes emergencyPulse {
+      0% { box-shadow: 0 0 0 0 rgba(225, 29, 72, 0.6); }
+      70% { box-shadow: 0 0 0 10px rgba(225, 29, 72, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(225, 29, 72, 0); }
+    }
+
+    /* Responsive Styles */
+    @media (max-width: 1100px) {
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+      .config-fields-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 900px) {
+      #app {
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        --map-width: 100%;
+      }
+      #resizeHandle { display: none; }
+      .mobile-view-tabs {
+        display: flex;
+        background: #ffffff;
+        border-bottom: 1px solid var(--border-color);
+        padding: 6px 10px;
+        gap: 8px;
+        z-index: 1000;
+        flex-shrink: 0;
+      }
+      .mobile-tab-btn {
+        flex: 1;
+        padding: 8px;
+        background: #f8fafc;
+        border: 1px solid #cbd5e1;
+        border-radius: 6px;
+        color: #475569;
+        font-size: 12px;
+        font-weight: 700;
+        cursor: pointer;
+        text-align: center;
+      }
+      .mobile-tab-btn.active {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: #fff;
+      }
+      #mapPane {
+        flex: 1;
+        height: 100%;
+        display: flex;
+      }
+      #panel {
+        flex: 1;
+        height: 100%;
+        display: none;
+      }
+      #app.view-dashboard #mapPane { display: none; }
+      #app.view-dashboard #panel { display: flex; }
+      .carriageways-grid { grid-template-columns: 1fr; }
+      .kpi-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="app">
+  <!-- Mobile Tab Switcher -->
+  <div class="mobile-view-tabs">
+    <button id="mobileTabMap" class="mobile-tab-btn active" type="button">🗺️ Live Map & Highway Lanes</button>
+    <button id="mobileTabDash" class="mobile-tab-btn" type="button">📊 Operations Dashboard</button>
+  </div>
+
+  <!-- Left: Interactive Map Pane -->
+  <div id="mapPane">
+    <!-- Top Floating Toolbar -->
+    <div class="map-header-bar">
+      <div class="map-plaza-badge">
+        <div class="pulse-dot"></div>
+        <span id="plazaNameBadge">Mumbai Eastern Express Plaza (6 Lanes)</span>
+      </div>
+      <div class="map-quick-tools">
+        <button id="recenterBtn" class="map-tool-btn" type="button" title="Center map on toll booths">📍 Center Plaza</button>
+        <button id="selectLocationBtn" class="map-tool-btn" type="button" title="Place plaza anywhere by clicking map">🎯 Set on Map</button>
+      </div>
+    </div>
+
+    <!-- Map Canvas -->
+    <div id="map"></div>
+
+    <!-- Bottom Legend Bar -->
+    <div class="map-legend-bar" id="legendBar">
+      <!-- Generated via JS -->
+    </div>
+  </div>
+
+  <!-- Resizer Divider Handle -->
+  <div id="resizeHandle" role="separator" aria-orientation="vertical" aria-label="Resize map and simulator panel" tabindex="0" title="Drag to adjust map width"></div>
+
+  <!-- Right: Operations & Traffic Management Panel -->
+  <div id="panel">
+    <!-- Panel Header -->
+    <header class="dashboard-header">
+      <div class="header-top-row">
+        <div class="brand-title">
+          <div class="brand-icon">🛣️</div>
+          <div>
+            <h1>Toll Plaza Simulator</h1>
+            <p id="laneConfigSubtitle">Six Lanes (3 Inbound + 3 Outbound) · Real-Time Queuing & Toll Enforcement</p>
+          </div>
+        </div>
+        <div id="statusBadge" class="status-badge ready">Ready</div>
+      </div>
+
+      <!-- Action Controls -->
+      <div class="sim-action-bar">
+        <div class="action-group-primary">
+          <button id="runBtn" class="btn btn-primary" type="button">▶ Run Simulation</button>
+          <button id="pauseBtn" class="btn" type="button" disabled>⏸ Pause</button>
+          <button id="resetBtn" class="btn btn-danger" type="button">⏹ Reset</button>
+        </div>
+        <div class="action-group-secondary">
+          <label style="font-size:11px;color:var(--text-muted);font-weight:600;">Speed:
+            <select id="speedSelect" class="form-control" style="width:auto;display:inline-block;padding:4px 8px;font-size:11px;margin-left:4px;">
+              <option value="1">1x Normal</option>
+              <option value="2" selected>2x Fast</option>
+              <option value="4">4x Hyper</option>
+              <option value="999">Instant Result</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <!-- Simulation Progress -->
+      <div class="progress-container">
+        <div class="progress-meta">
+          <span id="clockDisplay">Logical Time: 0.0 min / 45.0 min</span>
+          <span id="percentDisplay">0%</span>
+        </div>
+        <div class="progress-track">
+          <div id="progressFill" class="progress-fill"></div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Panel Scrollable Body -->
+    <div class="dashboard-body">
+
+      <!-- Completion Banner -->
+      <div id="completionBanner" class="completion-banner">
+        <span style="font-size: 18px;">✅</span>
+        <div>
+          <strong id="bannerTitle">Simulation Run Completed</strong>
+          <p id="bannerDesc" style="margin-top: 2px;">All vehicles processed successfully. Audit log and vehicle category breakdown updated below.</p>
+        </div>
+      </div>
+
+      <!-- Real-Time Metrics (KPI Cards) -->
+      <section aria-label="Real-time Operational Metrics">
+        <div class="section-title-wrap">
+          <span class="section-title">Live Key Performance Indicators</span>
+        </div>
+        <div class="kpi-grid">
+          <div class="kpi-card" style="--kpi-accent: #2563eb;">
+            <div class="kpi-label">Vehicles Crossed</div>
+            <div class="kpi-value" id="kpiCrossed">0 / 80</div>
+            <div class="kpi-sub" id="kpiCrossedSub">0% processed</div>
+          </div>
+          <div class="kpi-card" style="--kpi-accent: #10b981;">
+            <div class="kpi-label">Tolls Collected</div>
+            <div class="kpi-value" id="kpiToll">₹0</div>
+            <div class="kpi-sub" id="kpiTollSub">From paying traffic</div>
+          </div>
+          <div class="kpi-card" style="--kpi-accent: #f59e0b;">
+            <div class="kpi-label">Penalties / Fines</div>
+            <div class="kpi-value" id="kpiFine">₹0</div>
+            <div class="kpi-sub" id="kpiFineSub">Horn & pollution fines</div>
+          </div>
+          <div class="kpi-card" style="--kpi-accent: #8b5cf6;">
+            <div class="kpi-label">Avg Waiting Time</div>
+            <div class="kpi-value" id="kpiAvgWait">0.0 min</div>
+            <div class="kpi-sub" id="kpiMaxWaitSub">Max wait: 0 min</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Live 6-Lane Plaza Monitor -->
+      <section class="lanes-monitor-container" aria-label="Live 6-Lane Toll Plaza Visualizer">
+        <div class="section-title-wrap" style="margin-bottom:0;">
+          <span class="section-title">Toll Plaza Live Lane Queues</span>
+          <span style="font-size:11px;color:var(--text-muted);" id="activeQueueCountBadge">0 vehicles waiting in queues</span>
+        </div>
+
+        <div class="carriageways-grid">
+          <!-- Inbound Carriageway -->
+          <div class="carriageway-column">
+            <div class="carriageway-header">
+              <span>⬅ Inbound Plaza (SW ➔ NE)</span>
+              <span class="badge" id="inboundSummaryBadge">3 Lanes</span>
+            </div>
+            <div id="inboundLanesContainer" style="display:flex;flex-direction:column;gap:8px;">
+              <!-- Generated via JS -->
+            </div>
+          </div>
+
+          <!-- Outbound Carriageway -->
+          <div class="carriageway-column">
+            <div class="carriageway-header">
+              <span>Outbound Plaza (NE ➔ SW) ➔</span>
+              <span class="badge" id="outboundSummaryBadge">3 Lanes</span>
+            </div>
+            <div id="outboundLanesContainer" style="display:flex;flex-direction:column;gap:8px;">
+              <!-- Generated via JS -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Configuration Card -->
+      <section class="config-card" aria-label="Simulation Configuration">
+        <div class="section-title-wrap">
+          <span class="section-title">Traffic & Plaza Parameters</span>
+        </div>
+
+        <!-- Quick Scenarios Presets -->
+        <div class="config-presets-row">
+          <span style="font-size:11px;color:var(--text-muted);font-weight:600;">Presets:</span>
+          <button type="button" class="preset-chip active" data-preset="standard">Standard Mix (80)</button>
+          <button type="button" class="preset-chip" data-preset="rush">Morning Rush (140)</button>
+          <button type="button" class="preset-chip" data-preset="freight">Freight Flow (60)</button>
+          <button type="button" class="preset-chip" data-preset="emergency">Emergency Priority (45)</button>
+        </div>
+
+        <!-- Form Fields Grid -->
+        <div class="config-fields-grid">
+          <div class="form-group">
+            <label for="numVehiclesInput">Vehicles to Simulate</label>
+            <input id="numVehiclesInput" type="number" class="form-control" min="1" max="500" value="80" />
+            <span id="numVehiclesErr" class="form-error-msg">Enter 1 to 500 vehicles</span>
+          </div>
+
+          <div class="form-group">
+            <label for="arrivalWindowInput">Arrival Window (min)</label>
+            <input id="arrivalWindowInput" type="number" class="form-control" min="5" max="180" value="45" />
+            <span id="arrivalWindowErr" class="form-error-msg">Enter 5 to 180 minutes</span>
+          </div>
+
+          <div class="form-group">
+            <label for="lanesSelect">Booths per Direction</label>
+            <select id="lanesSelect" class="form-control">
+              <option value="3" selected>3 Lanes (6 Total Booths)</option>
+              <option value="2">2 Lanes (4 Total Booths)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Location Selector Preset -->
+        <div class="form-group">
+          <label for="locationPresetSelect">Toll Plaza Location</label>
+          <select id="locationPresetSelect" class="form-control">
+            <option value="mumbai_express" selected>📍 Mumbai — Eastern Express Highway Plaza</option>
+            <option value="bandra_sea_link">📍 Mumbai — Bandra-Worli Sea Link Plaza</option>
+            <option value="delhi_gurugram">📍 Delhi-Gurugram Expressway (Kherki Daula)</option>
+            <option value="bengaluru_elevated">📍 Bengaluru — Electronic City Elevated Plaza</option>
+            <option value="pune_expressway">📍 Pune-Mumbai Expressway (Khalapur Plaza)</option>
+            <option value="custom">📍 Custom Selected Map Coordinates</option>
+          </select>
+          <span id="locationCoordsReadout" style="font-size:10.5px;color:var(--text-dim);margin-top:2px;">Plaza at 19.07600° N, 72.87770° E</span>
+        </div>
+
+        <!-- Advanced Collapsible Settings -->
+        <div>
+          <button id="toggleAdvancedBtn" type="button" class="collapsible-toggle">
+            <span id="advancedArrow">▸</span> Advanced Simulation Settings
+          </button>
+          <div id="advancedSettingsBox" class="advanced-settings-box">
+            <div class="form-group">
+              <label for="queueSpacingInput">Queue Spacing (meters)</label>
+              <input id="queueSpacingInput" type="number" class="form-control" min="8" max="30" value="16" />
+            </div>
+            <div class="form-group">
+              <label for="hornPenaltyInput">Horn Violation Fine (₹)</label>
+              <input id="hornPenaltyInput" type="number" class="form-control" value="200" />
+            </div>
+            <div class="form-group">
+              <label for="pollutionPenaltyInput">Pollution Fine (₹)</label>
+              <input id="pollutionPenaltyInput" type="number" class="form-control" value="500" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Results & Reporting Hub (Tabs) -->
+      <section class="results-card" aria-label="Results and Reporting Hub">
+        <div class="tabs-nav" role="tablist">
+          <button class="tab-btn active" data-tab="tab-audit" role="tab">📋 Vehicle Audit Log</button>
+          <button class="tab-btn" data-tab="tab-summary" role="tab">📊 Category Breakdown</button>
+          <button class="tab-btn" data-tab="tab-rules" role="tab">📜 Tariff & Rules</button>
+          <button class="tab-btn" data-tab="tab-system" role="tab">ℹ️ System Info</button>
+        </div>
+
+        <!-- Tab 1: Detailed Vehicle Audit Log -->
+        <div id="tab-audit" class="tab-pane active" role="tabpanel">
+          <div class="audit-filter-bar">
+            <div class="filter-chips-group">
+              <button type="button" class="filter-chip active" data-filter="all">All (<span id="filterCountAll">0</span>)</button>
+              <button type="button" class="filter-chip" data-filter="paid">Paid (<span id="filterCountPaid">0</span>)</button>
+              <button type="button" class="filter-chip" data-filter="free">Toll-Free (<span id="filterCountFree">0</span>)</button>
+              <button type="button" class="filter-chip" data-filter="exempt">Exempt (<span id="filterCountExempt">0</span>)</button>
+              <button type="button" class="filter-chip" data-filter="fined">Fined (<span id="filterCountFined">0</span>)</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <div class="search-input-box">
+                <input id="auditSearchInput" type="text" placeholder="Search ID or type..." />
+              </div>
+              <button id="exportCsvBtn" class="btn btn-sm" type="button" title="Download report as CSV file">📥 CSV</button>
+            </div>
+          </div>
+
+          <div class="table-container">
+            <table id="auditTable">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Dir</th>
+                  <th>Lane</th>
+                  <th>Category</th>
+                  <th>Trip</th>
+                  <th>Arrived</th>
+                  <th>Waited</th>
+                  <th>Service</th>
+                  <th>Outcome</th>
+                  <th>Toll (₹)</th>
+                  <th>Penalty (₹)</th>
+                  <th>Penalty Detail</th>
+                  <th>Horns</th>
+                  <th>Pollution</th>
+                </tr>
+              </thead>
+              <tbody id="auditTableBody">
+                <tr><td colspan="14" style="text-align:center;color:var(--text-dim);padding:24px;">No simulation data. Click "Run Simulation" to start.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Tab 2: Vehicle Category Summary Breakdown -->
+        <div id="tab-summary" class="tab-pane" role="tabpanel">
+          <div class="table-container">
+            <table id="summaryTable">
+              <thead>
+                <tr>
+                  <th>Vehicle Category</th>
+                  <th>Base Toll</th>
+                  <th>Wait Limit</th>
+                  <th>Crossed</th>
+                  <th>Paid</th>
+                  <th>Toll-Free</th>
+                  <th>Exempt</th>
+                  <th>Toll Collected</th>
+                  <th>Penalties Collected</th>
+                </tr>
+              </thead>
+              <tbody id="summaryTableBody">
+                <!-- Generated via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Tab 3: Rules & Toll Tariff Reference -->
+        <div id="tab-rules" class="tab-pane" role="tabpanel">
+          <div style="font-size:12px;color:var(--text-muted);line-height:1.6;display:flex;flex-direction:column;gap:8px;">
+            <p><strong style="color:var(--text-main);">Toll Charges & Trip Multipliers:</strong> Standard vehicles pay their base tariff multiplied by trip type (Single: 1x, Double: 2x, Triple: 3x).</p>
+            <p><strong style="color:var(--text-main);">Waiting-Time Toll Waiver Rule:</strong> Under consumer protection and service quality rules, if a vehicle's waiting time in queue exceeds its category limit (e.g., 5 min for Two-wheelers, 10 min for Four-wheelers), the toll fee is completely waived (₹0).</p>
+            <p><strong style="color:var(--text-main);">Violations & Penalties:</strong> Horn violations (&gt; 5 honks) incur a ₹200 fine. Pollution violations incur a ₹500 fine.</p>
+            <p><strong style="color:var(--text-main);">Emergency Vehicles:</strong> Ambulances (🚑) and Fire Brigades (🚒) enjoy full toll exemption (₹0), zero service delay (0 min visit), and all violation fines are strictly waived.</p>
+            <p><strong style="color:var(--text-main);">Local & Government Exemptions:</strong> Government vehicles (🚘), Government buses (🚌), and Exempted locals (🎫) receive category-based toll exemption (₹0). Note that local exemption is categorized by vehicle classification rather than live geolocation verification.</p>
+          </div>
+        </div>
+
+        <!-- Tab 4: System Information -->
+        <div id="tab-system" class="tab-pane" role="tabpanel">
+          <div style="font-size:12px;color:var(--text-muted);line-height:1.6;display:flex;flex-direction:column;gap:8px;">
+            <p><strong style="color:var(--text-main);">Project Origin:</strong> Developed originally for B.Sc. Computer Science Semester V practicals, now modernized with an intelligent multi-lane highway operations dashboard.</p>
+            <p><strong style="color:var(--text-main);">Simulation Architecture:</strong> Uses an asynchronous event timeline and continuous kinematic positioning. Vehicles approach along designated lane centerlines, hold steady queue intervals, advance through the toll booth barrier, and depart down the exit corridor.</p>
+            <p><strong style="color:var(--text-main);">Deployment:</strong> 100% client-side web application with zero external build dependencies. Compatible with Netlify, Vercel, and GitHub Pages.</p>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<script>
+/** ========================================================
+ *  DOMAINS, TOLL RULES & CONFIGURATION
+ *  ======================================================== */
+const VEHICLE_TYPES = [
+  { key:'TWO',   name:'Two-wheeler',        toll: 30,  waitLimit: 5,  visitTime: 2,  color:'#16a34a', icon:'🛵' },
+  { key:'THREE', name:'Three-wheeler',      toll: 50,  waitLimit: 7,  visitTime: 3,  color:'#0d9488', icon:'🛺' },
+  { key:'FOUR',  name:'Four-wheeler',       toll: 100, waitLimit: 10, visitTime: 4,  color:'#2563eb', icon:'🚗' },
+  { key:'SIX',   name:'Six-wheeler',        toll: 180, waitLimit: 12, visitTime: 6,  color:'#7c3aed', icon:'🚚' },
+  { key:'CONT',  name:'Container truck',    toll: 250, waitLimit: 15, visitTime: 8,  color:'#9333ea', icon:'🚛' },
+  { key:'AMB',   name:'Ambulance',          toll: 0,   waitLimit: 0,  visitTime: 0,  color:'#e11d48', icon:'🚑', exempt:true, emergency:true },
+  { key:'FIRE',  name:'Fire brigade',       toll: 0,   waitLimit: 0,  visitTime: 0,  color:'#ea580c', icon:'🚒', exempt:true, emergency:true },
+  { key:'GOV',   name:'Government vehicle', toll: 0,   waitLimit: 0,  visitTime: 2,  color:'#d97706', icon:'🚘', exempt:true },
+  { key:'GBUS',  name:'Government bus',     toll: 0,   waitLimit: 0,  visitTime: 4,  color:'#f97316', icon:'🚌', exempt:true },
+  { key:'EXEM',  name:'Exempted (locals)',  toll: 0,   waitLimit: 0,  visitTime: 1,  color:'#78716c', icon:'🎫', exempt:true }
+];
+
+const TRIP_MULTIPLIERS = { SINGLE: 1, DOUBLE: 2, TRIPLE: 3 };
+const TRIP_TYPES = ['SINGLE', 'DOUBLE', 'TRIPLE'];
+const DIRECTIONS = ['IN', 'OUT'];
+
+const PRESET_LOCATIONS = {
+  mumbai_express:     { name: 'Mumbai Eastern Express Highway Plaza', lat: 19.0760, lng: 72.8777, zoom: 16 },
+  bandra_sea_link:    { name: 'Bandra-Worli Sea Link Toll Plaza',    lat: 19.0368, lng: 72.8172, zoom: 16 },
+  delhi_gurugram:     { name: 'Delhi-Gurugram Expressway Plaza',     lat: 28.3976, lng: 76.9855, zoom: 16 },
+  bengaluru_elevated: { name: 'Bengaluru Electronic City Plaza',      lat: 12.8718, lng: 77.5623, zoom: 16 },
+  pune_expressway:    { name: 'Pune-Mumbai Expressway (Khalapur)',   lat: 18.8475, lng: 73.2842, zoom: 16 }
+};
+
+const SCENARIOS = {
+  standard:  { vehicles: 80,  window: 45, lanes: 3, desc: 'Balanced real-world traffic mix' },
+  rush:      { vehicles: 140, window: 30, lanes: 3, desc: 'Peak hour congestion with long queues' },
+  freight:   { vehicles: 60,  window: 50, lanes: 3, desc: 'Heavy commercial freight and trucks' },
+  emergency: { vehicles: 45,  window: 25, lanes: 3, desc: 'Emergency and priority vehicle flow' }
+};
+
+// Map & Geometry parameters
+let TOLL_A = { lat: 19.0760, lng: 72.8777 }; // Inbound plaza center
+let TOLL_B = { lat: 19.0760, lng: 72.8777 }; // Outbound plaza center
+const QUEUE_BEARING_IN  = 225; // Inbound approach: SW (225°) heading NE (45°)
+const QUEUE_BEARING_OUT = 45;  // Outbound approach: NE (45°) heading SW (225°)
+const CARRIAGEWAY_OFFSET_BEARING = 135; // Perpendicular offset between inbound and outbound
+const CARRIAGEWAY_OFFSET_METERS  = 65;  // Distance between carriageways
+let LANES_PER_DIRECTION = 3;
+const LANE_SPACING_METERS = 9;
+const ROAD_APPROACH_LENGTH = 450;
+const ROAD_EXIT_LENGTH     = 300;
+
+/** ========================================================
+ *  SIMULATION STATE
+ *  ======================================================== */
+const SIM = {
+  status: 'READY', // READY | RUNNING | PAUSED | COMPLETED
+  time: 0.0,       // Current logical minute
+  maxTime: 45.0,   // Max logical minute
+  speed: 2,        // Speed multiplier (logical minutes per real second * constant)
+  schedule: [],    // Precomputed vehicle schedules
+  rows: [],        // Outcome results
+  totals: { crossed: 0, toll: 0, fine: 0, exemptPassed: 0, payingCount: 0, freeWaitCount: 0, emergencyCount: 0, totalWaitTime: 0 },
+  typeSummary: {},
+  animFrameId: null,
+  lastRealTimestamp: 0,
+  activeFilter: 'all',
+  searchQuery: ''
+};
+
+// Map instances
+let map = null;
+let staticLayerGroup = null;
+let markerLayerGroup = null;
+let selectingLocationOnMap = false;
+let vehicleMarkerMap = new Map(); // id -> Leaflet Marker
+let boothMarkerMap = new Map();   // 'IN-0' -> Leaflet Marker
+
+/** ========================================================
+ *  GEODETIC & COORDINATE UTILITIES
+ *  ======================================================== */
+function toRad(d) { return d * Math.PI / 180; }
+function toDeg(r) { return r * 180 / Math.PI; }
+function currency(n) { return Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 }); }
+function randChoice(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+function randInt(min, max) { return Math.floor(min + Math.random() * (max - min + 1)); }
+
+function movePointMeters(origin, bearingDeg, distanceMeters) {
+  const R = 6371000;
+  const brng = toRad(bearingDeg);
+  const lat1 = toRad(origin.lat);
+  const lon1 = toRad(origin.lng);
+  const dr = distanceMeters / R;
+  const lat2 = Math.asin(Math.sin(lat1) * Math.cos(dr) + Math.cos(lat1) * Math.sin(dr) * Math.cos(brng));
+  const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(dr) * Math.cos(lat1), Math.cos(dr) - Math.sin(lat1) * Math.sin(lat2));
+  return { lat: toDeg(lat2), lng: toDeg(lon2) };
+}
+
+function leafletPoint(p) {
+  return [p.lat, p.lng];
+}
+
+function lanePositionFor(direction, laneIndex) {
+  const center = direction === 'IN' ? TOLL_A : TOLL_B;
+  const queueBearing = direction === 'IN' ? QUEUE_BEARING_IN : QUEUE_BEARING_OUT;
+  const offset = (laneIndex - (LANES_PER_DIRECTION - 1) / 2) * LANE_SPACING_METERS;
+  return movePointMeters(center, queueBearing + 90, offset);
+}
+
+/** ========================================================
+ *  MAP & TOLL ROAD RENDERING
+ *  ======================================================== */
+function drawTollRoadCorridor(direction) {
+  const center = direction === 'IN' ? TOLL_A : TOLL_B;
+  const queueBearing = direction === 'IN' ? QUEUE_BEARING_IN : QUEUE_BEARING_OUT;
+  const acrossBearing = queueBearing + 90;
+  const roadWidth = LANES_PER_DIRECTION * LANE_SPACING_METERS;
+  const roadHalfWidth = roadWidth / 2 + 3; // with outer shoulders
+
+  const roadStart = movePointMeters(center, queueBearing, ROAD_APPROACH_LENGTH);
+  const roadEnd   = movePointMeters(center, queueBearing + 180, ROAD_EXIT_LENGTH);
+
+  // Asphalt road polygon
+  const roadCorners = [
+    movePointMeters(roadStart, acrossBearing + 180, roadHalfWidth),
+    movePointMeters(roadEnd, acrossBearing + 180, roadHalfWidth),
+    movePointMeters(roadEnd, acrossBearing, roadHalfWidth),
+    movePointMeters(roadStart, acrossBearing, roadHalfWidth)
+  ];
+
+  L.polygon(roadCorners.map(leafletPoint), {
+    color: '#475569',
+    weight: 1.5,
+    fillColor: '#1e293b',
+    fillOpacity: 0.95
+  }).addTo(staticLayerGroup);
+
+  // Concrete plaza apron slab around booths
+  const apronStart = movePointMeters(center, queueBearing, 35);
+  const apronEnd   = movePointMeters(center, queueBearing + 180, 25);
+  const apronCorners = [
+    movePointMeters(apronStart, acrossBearing + 180, roadHalfWidth + 1.5),
+    movePointMeters(apronEnd, acrossBearing + 180, roadHalfWidth + 1.5),
+    movePointMeters(apronEnd, acrossBearing, roadHalfWidth + 1.5),
+    movePointMeters(apronStart, acrossBearing, roadHalfWidth + 1.5)
+  ];
+  L.polygon(apronCorners.map(leafletPoint), {
+    color: '#64748b',
+    weight: 1,
+    fillColor: '#334155',
+    fillOpacity: 0.95
+  }).addTo(staticLayerGroup);
+
+  // Dashed lane boundary lines
+  for (let b = 1; b < LANES_PER_DIRECTION; b++) {
+    const offset = (b - LANES_PER_DIRECTION / 2) * LANE_SPACING_METERS;
+    const lineStart = movePointMeters(roadStart, acrossBearing, offset);
+    const lineEnd   = movePointMeters(roadEnd, acrossBearing, offset);
+    L.polyline([leafletPoint(lineStart), leafletPoint(lineEnd)], {
+      color: '#f8fafc',
+      weight: 1.5,
+      opacity: 0.65,
+      dashArray: '8, 10'
+    }).addTo(staticLayerGroup);
+  }
+
+  // Toll booth stop lines and booth markers
+  for (let i = 0; i < LANES_PER_DIRECTION; i++) {
+    const boothPos = lanePositionFor(direction, i);
+
+    // Stop line
+    const stopLeft  = movePointMeters(boothPos, acrossBearing + 180, LANE_SPACING_METERS * 0.42);
+    const stopRight = movePointMeters(boothPos, acrossBearing, LANE_SPACING_METERS * 0.42);
+    L.polyline([leafletPoint(stopLeft), leafletPoint(stopRight)], {
+      color: '#fbbf24',
+      weight: 3,
+      opacity: 0.9
+    }).addTo(staticLayerGroup);
+
+    // Toll booth marker
+    const boothKey = `${direction}-${i}`;
+    const boothIcon = L.divIcon({
+      className: 'sim-marker-icon',
+      html: `
+        <div id="booth-marker-${boothKey}" class="sim-marker-booth">
+          <span>${direction}-${i + 1}</span>
+          <div class="led-status"></div>
+        </div>
+      `,
+      iconSize: [44, 26],
+      iconAnchor: [22, 13]
+    });
+
+    const marker = L.marker(leafletPoint(boothPos), { icon: boothIcon }).addTo(staticLayerGroup);
+    marker.bindTooltip(`<strong>${direction === 'IN' ? 'Inbound' : 'Outbound'} Lane ${i + 1} Toll Booth</strong><br>Status: Standby / Ready`, {
+      direction: 'top',
+      offset: [0, -14]
+    });
+    boothMarkerMap.set(boothKey, marker);
+  }
+
+  // Overhead Gantry Canopy line
+  const gantryLeft  = movePointMeters(center, acrossBearing + 180, roadHalfWidth + 3);
+  const gantryRight = movePointMeters(center, acrossBearing, roadHalfWidth + 3);
+  L.polyline([leafletPoint(gantryLeft), leafletPoint(gantryRight)], {
+    color: '#38bdf8',
+    weight: 4,
+    opacity: 0.75
+  }).addTo(staticLayerGroup);
+}
+
+function renderTollPlazaInfrastructure() {
+  TOLL_B = movePointMeters(TOLL_A, CARRIAGEWAY_OFFSET_BEARING, CARRIAGEWAY_OFFSET_METERS);
+  if (staticLayerGroup) staticLayerGroup.clearLayers();
+  boothMarkerMap.clear();
+
+  // Highway central divider/median between carriageways
+  const medianStart = movePointMeters(TOLL_A, QUEUE_BEARING_IN, ROAD_APPROACH_LENGTH);
+  const medianEnd   = movePointMeters(TOLL_A, QUEUE_BEARING_IN + 180, ROAD_EXIT_LENGTH);
+  const medianMidA  = movePointMeters(medianStart, CARRIAGEWAY_OFFSET_BEARING, CARRIAGEWAY_OFFSET_METERS / 2);
+  const medianMidB  = movePointMeters(medianEnd, CARRIAGEWAY_OFFSET_BEARING, CARRIAGEWAY_OFFSET_METERS / 2);
+  L.polyline([leafletPoint(medianMidA), leafletPoint(medianMidB)], {
+    color: '#eab308',
+    weight: 2,
+    dashArray: '5, 5',
+    opacity: 0.5
+  }).addTo(staticLayerGroup);
+
+  drawTollRoadCorridor('IN');
+  drawTollRoadCorridor('OUT');
+}
+
+/** ========================================================
+ *  SCHEDULING & QUEUING CALCULATION (BUSINESS LOGIC)
+ *  ======================================================== */
+function computeDualDirectionSchedule(vehicles, inLanes, outLanes) {
+  const inVehicles  = vehicles.filter(v => v.direction === 'IN');
+  const outVehicles = vehicles.filter(v => v.direction === 'OUT');
+
+  function scheduleDirection(vList, numLanes, direction) {
+    // Sort by arrival minute
+    const sorted = [...vList].sort((a, b) => a.arrivalMin - b.arrivalMin);
+    const nextFree = new Array(numLanes).fill(0);
+    const sched = [];
+
+    for (const v of sorted) {
+      const visit = v.type.visitTime || 0;
+
+      // Greedy shortest-expected-wait lane selection (earliest-free booth)
+      let bi = 0;
+      for (let i = 1; i < numLanes; i++) {
+        if (nextFree[i] < nextFree[bi]) bi = i;
+      }
+
+      const serviceStart = Math.max(v.arrivalMin, nextFree[bi]);
+      const waited = serviceStart - v.arrivalMin;
+      const serviceEnd = serviceStart + visit;
+      nextFree[bi] = serviceEnd;
+
+      const queueBearing = direction === 'IN' ? QUEUE_BEARING_IN : QUEUE_BEARING_OUT;
+      const boothPos = lanePositionFor(direction, bi);
+
+      sched.push({
+        ...v,
+        boothIndex: bi,
+        lane: bi + 1,
+        boothPos,
+        queueBearing,
+        serviceStart,
+        serviceEnd,
+        waited,
+        visit
+      });
+    }
+    return sched;
+  }
+
+  const schedIn  = scheduleDirection(inVehicles, inLanes, 'IN');
+  const schedOut = scheduleDirection(outVehicles, outLanes, 'OUT');
+  return [...schedIn, ...schedOut];
+}
+
+function evaluateVehicleOutcomes(schedule) {
+  const rows = [];
+  let totalToll = 0;
+  let totalFine = 0;
+  let exemptPassed = 0;
+  let payingCount = 0;
+  let freeWaitCount = 0;
+  let emergencyCount = 0;
+  let totalWaitTime = 0;
+
+  const typeSummary = {};
+  VEHICLE_TYPES.forEach(t => {
+    typeSummary[t.key] = { name: t.name, crossed: 0, paid: 0, free: 0, exempt: 0, collected: 0, fines: 0 };
+  });
+
+  const hornPenaltyAmt = Number(document.getElementById('hornPenaltyInput')?.value || 200);
+  const pollutionPenaltyAmt = Number(document.getElementById('pollutionPenaltyInput')?.value || 500);
+
+  for (const s of schedule) {
+    const isExempt = !!s.type.exempt;
+    const isEmergency = !!s.type.emergency;
+    totalWaitTime += s.waited;
+
+    if (isEmergency) emergencyCount++;
+
+    // Toll calculation
+    let payToll = 0;
+    let tollOutcome = '';
+    if (!isExempt) {
+      const mult = TRIP_MULTIPLIERS[s.tripType] || 1;
+      const base = s.type.toll;
+      if (s.waited > s.type.waitLimit) {
+        payToll = 0;
+        freeWaitCount++;
+        tollOutcome = 'Free (Wait > limit)';
+      } else {
+        payToll = base * mult;
+        payingCount++;
+        tollOutcome = 'Paid';
+      }
+    } else {
+      exemptPassed++;
+      tollOutcome = 'Free (Exempt)';
+    }
+
+    // Penalties calculation
+    let penalty = 0;
+    const penaltyReasons = [];
+    const hasHornViolation = s.horns > 5;
+
+    if (isEmergency && (hasHornViolation || s.pollution)) {
+      penaltyReasons.push('Emergency vehicle — fines waived');
+    } else {
+      if (hasHornViolation) {
+        penalty += hornPenaltyAmt;
+        penaltyReasons.push(`Horn violation (+₹${currency(hornPenaltyAmt)})`);
+      }
+      if (s.pollution) {
+        penalty += pollutionPenaltyAmt;
+        penaltyReasons.push(`Pollution emission (+₹${currency(pollutionPenaltyAmt)})`);
+      }
+    }
+
+    totalToll += payToll;
+    totalFine += penalty;
+
+    // Type summary accounting
+    const ts = typeSummary[s.type.key];
+    ts.crossed += 1;
+    ts.fines += penalty;
+    if (isExempt) {
+      ts.exempt += 1;
+    } else if (payToll > 0) {
+      ts.paid += 1;
+      ts.collected += payToll;
+    } else {
+      ts.free += 1;
+    }
+
+    const fullOutcome = tollOutcome + (penalty > 0 ? ' + Fined' : '');
+
+    rows.push({
+      id: s.id,
+      dir: s.direction,
+      lane: s.lane,
+      boothIndex: s.boothIndex,
+      type: s.type,
+      tripType: s.tripType,
+      arrivalMin: s.arrivalMin,
+      waited: s.waited,
+      visit: s.visit,
+      serviceStart: s.serviceStart,
+      serviceEnd: s.serviceEnd,
+      outcome: fullOutcome,
+      toll: payToll,
+      penalty,
+      penaltyReason: penaltyReasons.join('; ') || '—',
+      horns: s.horns,
+      pollution: s.pollution ? 'Yes' : 'No'
+    });
+  }
+
+  // Sort rows cleanly by vehicle ID
+  rows.sort((a, b) => a.id - b.id);
+
+  SIM.rows = rows;
+  SIM.totals = {
+    crossed: rows.length,
+    toll: totalToll,
+    fine: totalFine,
+    exemptPassed,
+    payingCount,
+    freeWaitCount,
+    emergencyCount,
+    totalWaitTime
+  };
+  SIM.typeSummary = typeSummary;
+}
+
+/** ========================================================
+ *  KINEMATIC VEHICLE POSITIONING & ANIMATION
+ *  ======================================================== */
+function getVehicleDistanceAlongLane(v, laneVehicles, simTime, queueSpacing, approachTime = 0.8) {
+  // 1. Not yet entered highway approach
+  const spawnTime = v.arrivalMin - approachTime;
+  if (simTime < spawnTime) return null;
+
+  // 2. Completed booth clearance and moving down exit road
+  if (simTime > v.serviceEnd) {
+    const exitSpeed = 160; // meters per logical minute
+    const distPastBooth = (simTime - v.serviceEnd) * exitSpeed;
+    if (distPastBooth > ROAD_EXIT_LENGTH) return -999; // Cleared and exited
+    return -distPastBooth; // Negative distance represents meters past booth
+  }
+
+  // 3. At the toll booth window / barrier
+  if (simTime >= v.serviceStart && simTime <= v.serviceEnd) {
+    return 0; // Exactly at stop line
+  }
+
+  // 4. In queue or approaching: compute queue rank
+  // Rank = count of vehicles ahead in same lane that haven't finished service yet
+  const aheadCount = laneVehicles.filter(u => u.serviceStart < v.serviceStart && u.serviceEnd > simTime).length;
+  const targetQueueDist = aheadCount * queueSpacing + 2.5;
+
+  // Approach interpolation from entry point (ROAD_APPROACH_LENGTH meters back)
+  const approachProgress = Math.min(1, Math.max(0, (simTime - spawnTime) / approachTime));
+  const freeTravelDist = ROAD_APPROACH_LENGTH * (1 - approachProgress);
+
+  return Math.max(targetQueueDist, freeTravelDist);
+}
+
+function updateSimulationFrame(timestamp) {
+  if (SIM.status !== 'RUNNING') return;
+
+  if (!SIM.lastRealTimestamp) SIM.lastRealTimestamp = timestamp;
+  const deltaRealSec = (timestamp - SIM.lastRealTimestamp) / 1000;
+  SIM.lastRealTimestamp = timestamp;
+
+  // Advance simulation clock
+  // At speed 1x: 1 real second = 1.2 logical minutes
+  const logicalMinutesDelta = deltaRealSec * (SIM.speed === 999 ? 9999 : (SIM.speed * 1.2));
+  SIM.time = Math.min(SIM.maxTime, SIM.time + logicalMinutesDelta);
+
+  // Group vehicles by lane for queue ranking
+  const laneVehiclesMap = new Map();
+  for (const s of SIM.schedule) {
+    const key = `${s.direction}-${s.boothIndex}`;
+    if (!laneVehiclesMap.has(key)) laneVehiclesMap.set(key, []);
+    laneVehiclesMap.get(key).push(s);
+  }
+
+  const queueSpacing = Number(document.getElementById('queueSpacingInput')?.value || 16);
+  let totalWaitingInQueues = 0;
+  let totalProcessedSoFar = 0;
+  let totalTollSoFar = 0;
+  let totalFineSoFar = 0;
+  let totalWaitSoFar = 0;
+
+  // Active lane tracking for dashboard visualizer
+  const laneStateTracker = new Map();
+  for (let d of ['IN', 'OUT']) {
+    for (let i = 0; i < LANES_PER_DIRECTION; i++) {
+      laneStateTracker.set(`${d}-${i}`, { boothVehicle: null, queuedVehicles: [] });
+    }
+  }
+
+  // Position each vehicle
+  for (const s of SIM.schedule) {
+    const laneKey = `${s.direction}-${s.boothIndex}`;
+    const laneList = laneVehiclesMap.get(laneKey) || [];
+    const dist = getVehicleDistanceAlongLane(s, laneList, SIM.time, queueSpacing);
+
+    // Cumulative stats as vehicles finish service
+    if (SIM.time >= s.serviceEnd) {
+      totalProcessedSoFar++;
+      const row = SIM.rows.find(r => r.id === s.id);
+      if (row) {
+        totalTollSoFar += row.toll;
+        totalFineSoFar += row.penalty;
+        totalWaitSoFar += row.waited;
+      }
+    }
+
+    // Vehicle not on map
+    if (dist === null || dist === -999) {
+      if (vehicleMarkerMap.has(s.id)) {
+        vehicleMarkerMap.get(s.id).remove();
+        vehicleMarkerMap.delete(s.id);
+      }
+      continue;
+    }
+
+    // Vehicle is active on road
+    let vehicleCoord;
+    let statusText = '';
+    const laneData = laneStateTracker.get(laneKey);
+
+    if (dist === 0) {
+      // At booth
+      vehicleCoord = s.boothPos;
+      statusText = 'At Toll Booth (Processing)';
+      if (laneData) laneData.boothVehicle = s;
+    } else if (dist > 0) {
+      // In approach or queue
+      vehicleCoord = movePointMeters(s.boothPos, s.queueBearing, dist);
+      statusText = dist <= 50 ? 'Waiting in Queue' : 'Approaching Plaza';
+      totalWaitingInQueues++;
+      if (laneData) laneData.queuedVehicles.push(s);
+    } else {
+      // Past booth (exiting)
+      vehicleCoord = movePointMeters(s.boothPos, s.queueBearing + 180, -dist);
+      statusText = 'Departing Plaza';
+    }
+
+    // Create or update Leaflet marker
+    let marker = vehicleMarkerMap.get(s.id);
+    if (!marker) {
+      const icon = L.divIcon({
+        className: 'sim-marker-icon',
+        html: `
+          <div class="sim-marker-vehicle ${s.type.emergency ? 'emergency' : ''}" style="--v-color: ${s.type.color};" title="Vehicle #${s.id} (${s.type.name})">
+            <span>${s.type.icon}</span>
+          </div>
+        `,
+        iconSize: [32, 32],
+        iconAnchor: [16, 16]
+      });
+      marker = L.marker(leafletPoint(vehicleCoord), { icon, zIndexOffset: 200 }).addTo(markerLayerGroup);
+      marker.bindTooltip(`
+        <strong>#${s.id} · ${s.type.name}</strong><br>
+        Direction: ${s.direction} Lane ${s.lane}<br>
+        Status: <span id="tooltip-status-${s.id}">${statusText}</span><br>
+        Trip: ${s.tripType} Multiplier<br>
+        Waited: ${s.waited} min
+      `, { direction: 'top', offset: [0, -14] });
+      vehicleMarkerMap.set(s.id, marker);
+    } else {
+      marker.setLatLng(leafletPoint(vehicleCoord));
+    }
+  }
+
+  // Update Booth LEDs & Status
+  for (let d of ['IN', 'OUT']) {
+    for (let i = 0; i < LANES_PER_DIRECTION; i++) {
+      const key = `${d}-${i}`;
+      const boothElem = document.getElementById(`booth-marker-${key}`);
+      const laneData = laneStateTracker.get(key);
+      if (boothElem) {
+        boothElem.classList.remove('serving', 'clear');
+        if (laneData && laneData.boothVehicle) {
+          boothElem.classList.add('serving');
+        } else if (laneData && laneData.queuedVehicles.length === 0) {
+          boothElem.classList.add('clear');
+        }
+      }
+    }
+  }
+
+  // Update Live Dashboard KPIs
+  document.getElementById('clockDisplay').textContent = `Logical Time: ${SIM.time.toFixed(1)} min / ${SIM.maxTime.toFixed(1)} min`;
+  const pct = Math.min(100, (SIM.time / SIM.maxTime) * 100);
+  document.getElementById('percentDisplay').textContent = `${Math.round(pct)}%`;
+  document.getElementById('progressFill').style.width = `${pct}%`;
+
+  document.getElementById('kpiCrossed').textContent = `${totalProcessedSoFar} / ${SIM.schedule.length}`;
+  document.getElementById('kpiCrossedSub').textContent = `${Math.round((totalProcessedSoFar / Math.max(1, SIM.schedule.length)) * 100)}% processed`;
+  document.getElementById('kpiToll').textContent = `₹${currency(totalTollSoFar)}`;
+  document.getElementById('kpiFine').textContent = `₹${currency(totalFineSoFar)}`;
+  const liveAvg = totalProcessedSoFar > 0 ? (totalWaitSoFar / totalProcessedSoFar).toFixed(1) : '0.0';
+  document.getElementById('kpiAvgWait').textContent = `${liveAvg} min`;
+  document.getElementById('activeQueueCountBadge').textContent = `${totalWaitingInQueues} vehicles waiting in queues`;
+
+  // Update Live Lane Monitor Strips in Dashboard
+  renderLiveLaneMonitor(laneStateTracker);
+
+  // Check if simulation completed
+  if (SIM.time >= SIM.maxTime) {
+    completeSimulationRun();
+    return;
+  }
+
+  SIM.animFrameId = requestAnimationFrame(updateSimulationFrame);
+}
+
+function renderLiveLaneMonitor(laneStateTracker) {
+  for (let d of ['IN', 'OUT']) {
+    const container = document.getElementById(d === 'IN' ? 'inboundLanesContainer' : 'outboundLanesContainer');
+    if (!container) continue;
+
+    for (let i = 0; i < LANES_PER_DIRECTION; i++) {
+      const key = `${d}-${i}`;
+      const laneBox = document.getElementById(`lane-box-${key}`);
+      if (!laneBox) continue;
+
+      const data = laneStateTracker ? laneStateTracker.get(key) : { boothVehicle: null, queuedVehicles: [] };
+      const statusPill = laneBox.querySelector('.lane-state-pill');
+      const queueStrip = laneBox.querySelector('.lane-queue-strip');
+
+      laneBox.classList.remove('processing', 'clearing');
+
+      if (data && data.boothVehicle) {
+        laneBox.classList.add('processing');
+        if (statusPill) {
+          statusPill.className = 'lane-state-pill serving';
+          statusPill.textContent = `BUSY #${data.boothVehicle.id} (${data.boothVehicle.type.icon})`;
+        }
+      } else {
+        if (statusPill) {
+          statusPill.className = 'lane-state-pill idle';
+          statusPill.textContent = 'STANDBY';
+        }
+      }
+
+      if (queueStrip) {
+        if (data && data.queuedVehicles && data.queuedVehicles.length > 0) {
+          queueStrip.innerHTML = data.queuedVehicles.slice(0, 6).map(q => `
+            <span class="queue-chip" title="${q.type.name} #${q.id} (waited ${q.waited}m)">
+              ${q.type.icon} #${q.id}
+            </span>
+          `).join('') + (data.queuedVehicles.length > 6 ? `<span class="queue-chip">+${data.queuedVehicles.length - 6}</span>` : '');
+        } else {
+          queueStrip.innerHTML = '<span class="queue-empty-text">Queue clear — no waiting vehicles</span>';
+        }
+      }
+    }
+  }
+}
+
+function buildLaneMonitorDOM() {
+  const inContainer = document.getElementById('inboundLanesContainer');
+  const outContainer = document.getElementById('outboundLanesContainer');
+  inContainer.innerHTML = '';
+  outContainer.innerHTML = '';
+
+  for (let d of ['IN', 'OUT']) {
+    const target = d === 'IN' ? inContainer : outContainer;
+    for (let i = 0; i < LANES_PER_DIRECTION; i++) {
+      const key = `${d}-${i}`;
+      const div = document.createElement('div');
+      div.id = `lane-box-${key}`;
+      div.className = 'lane-box';
+      div.innerHTML = `
+        <div class="lane-top-info">
+          <div class="lane-title">
+            <span style="color:var(--primary);">●</span> Lane ${i + 1}
+          </div>
+          <span class="lane-state-pill idle">STANDBY</span>
+        </div>
+        <div class="lane-queue-strip">
+          <span class="queue-empty-text">Queue clear — no waiting vehicles</span>
+        </div>
+      `;
+      target.appendChild(div);
+    }
+  }
+}
+
+/** ========================================================
+ *  SIMULATION LIFECYCLE CONTROLS
+ *  ======================================================== */
+function validateInputs() {
+  let valid = true;
+  const numInput = document.getElementById('numVehiclesInput');
+  const winInput = document.getElementById('arrivalWindowInput');
+  const numErr   = document.getElementById('numVehiclesErr');
+  const winErr   = document.getElementById('arrivalWindowErr');
+
+  const n = Number(numInput.value);
+  if (!n || n < 1 || n > 500) {
+    numInput.classList.add('error');
+    numErr.classList.add('visible');
+    valid = false;
+  } else {
+    numInput.classList.remove('error');
+    numErr.classList.remove('visible');
+  }
+
+  const w = Number(winInput.value);
+  if (!w || w < 5 || w > 180) {
+    winInput.classList.add('error');
+    winErr.classList.add('visible');
+    valid = false;
+  } else {
+    winInput.classList.remove('error');
+    winErr.classList.remove('visible');
+  }
+
+  return valid;
+}
+
+function startSimulation() {
+  if (SIM.status === 'RUNNING') return;
+
+  if (SIM.status === 'PAUSED') {
+    // Resume simulation
+    SIM.status = 'RUNNING';
+    setUIState('RUNNING');
+    SIM.lastRealTimestamp = 0;
+    SIM.animFrameId = requestAnimationFrame(updateSimulationFrame);
+    return;
+  }
+
+  if (!validateInputs()) return;
+
+  // Fresh Run
+  resetSimulationState(false);
+
+  const n = Number(document.getElementById('numVehiclesInput').value);
+  const arrivalWindow = Number(document.getElementById('arrivalWindowInput').value);
+  SIM.speed = Number(document.getElementById('speedSelect')?.value || SIM.speed);
+
+  // Generate random vehicles
+  const generatedVehicles = [];
+  for (let i = 0; i < n; i++) {
+    const type = randChoice(VEHICLE_TYPES);
+    const direction = randChoice(DIRECTIONS);
+    const arrivalMin = randInt(0, arrivalWindow);
+    const horns = randInt(0, 9);
+    const pollution = Math.random() < 0.12; // 12% probability of pollution violation
+    const tripType = randChoice(TRIP_TYPES);
+    generatedVehicles.push({
+      id: i + 1,
+      type,
+      direction,
+      arrivalMin,
+      horns,
+      pollution,
+      tripType
+    });
+  }
+
+  // Compute schedules and outcomes
+  SIM.schedule = computeDualDirectionSchedule(generatedVehicles, LANES_PER_DIRECTION, LANES_PER_DIRECTION);
+  evaluateVehicleOutcomes(SIM.schedule);
+
+  // Determine max logical minute needed for all vehicles to clear
+  let maxEnd = arrivalWindow;
+  for (const s of SIM.schedule) {
+    if (s.serviceEnd > maxEnd) maxEnd = s.serviceEnd;
+  }
+  SIM.maxTime = maxEnd + 3.0; // Grace period for exit road travel
+  SIM.time = 0.0;
+  SIM.status = 'RUNNING';
+  setUIState('RUNNING');
+
+  // Render initial audit tables
+  renderAuditTable();
+  renderSummaryTable();
+
+  // If Instant Result selected, immediately jump to end
+  if (SIM.speed === 999) {
+    SIM.time = SIM.maxTime;
+    completeSimulationRun();
+    return;
+  }
+
+  SIM.lastRealTimestamp = 0;
+  SIM.animFrameId = requestAnimationFrame(updateSimulationFrame);
+}
+
+function pauseSimulation() {
+  if (SIM.status !== 'RUNNING') return;
+  SIM.status = 'PAUSED';
+  if (SIM.animFrameId) cancelAnimationFrame(SIM.animFrameId);
+  setUIState('PAUSED');
+}
+
+function resetSimulationState(clearInputs = true) {
+  if (SIM.animFrameId) {
+    cancelAnimationFrame(SIM.animFrameId);
+    SIM.animFrameId = null;
+  }
+
+  SIM.status = 'READY';
+  SIM.time = 0.0;
+  SIM.schedule = [];
+  SIM.rows = [];
+  SIM.totals = { crossed: 0, toll: 0, fine: 0, exemptPassed: 0, payingCount: 0, freeWaitCount: 0, emergencyCount: 0, totalWaitTime: 0 };
+  SIM.typeSummary = {};
+  SIM.lastRealTimestamp = 0;
+
+  // Clear map vehicle markers
+  if (markerLayerGroup) markerLayerGroup.clearLayers();
+  vehicleMarkerMap.clear();
+
+  // Reset UI
+  setUIState('READY');
+  document.getElementById('clockDisplay').textContent = `Logical Time: 0.0 min / ${document.getElementById('arrivalWindowInput').value}.0 min`;
+  document.getElementById('percentDisplay').textContent = '0%';
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('completionBanner').classList.remove('visible');
+
+  // Reset KPI cards
+  document.getElementById('kpiCrossed').textContent = `0 / ${document.getElementById('numVehiclesInput').value}`;
+  document.getElementById('kpiCrossedSub').textContent = '0% processed';
+  document.getElementById('kpiToll').textContent = '₹0';
+  document.getElementById('kpiFine').textContent = '₹0';
+  document.getElementById('kpiAvgWait').textContent = '0.0 min';
+  document.getElementById('kpiMaxWaitSub').textContent = 'Max wait: 0 min';
+  document.getElementById('activeQueueCountBadge').textContent = '0 vehicles waiting in queues';
+
+  renderAuditTable();
+  renderSummaryTable();
+  buildLaneMonitorDOM();
+}
+
+function completeSimulationRun() {
+  if (SIM.animFrameId) cancelAnimationFrame(SIM.animFrameId);
+  SIM.animFrameId = null;
+  SIM.status = 'COMPLETED';
+  setUIState('COMPLETED');
+
+  // Clear road vehicles
+  if (markerLayerGroup) markerLayerGroup.clearLayers();
+  vehicleMarkerMap.clear();
+
+  // Progress to 100%
+  document.getElementById('clockDisplay').textContent = `Logical Time: ${SIM.maxTime.toFixed(1)} min / ${SIM.maxTime.toFixed(1)} min`;
+  document.getElementById('percentDisplay').textContent = '100%';
+  document.getElementById('progressFill').style.width = '100%';
+
+  // Final KPI values
+  const n = SIM.rows.length;
+  document.getElementById('kpiCrossed').textContent = `${n} / ${n}`;
+  document.getElementById('kpiCrossedSub').textContent = '100% completed';
+  document.getElementById('kpiToll').textContent = `₹${currency(SIM.totals.toll)}`;
+  document.getElementById('kpiFine').textContent = `₹${currency(SIM.totals.fine)}`;
+  const avgWait = n > 0 ? (SIM.totals.totalWaitTime / n).toFixed(1) : '0.0';
+  let maxWait = 0;
+  for (const r of SIM.rows) { if (r.waited > maxWait) maxWait = r.waited; }
+  document.getElementById('kpiAvgWait').textContent = `${avgWait} min`;
+  document.getElementById('kpiMaxWaitSub').textContent = `Max wait: ${maxWait} min`;
+  document.getElementById('activeQueueCountBadge').textContent = 'All queues cleared';
+
+  // Completion banner
+  const banner = document.getElementById('completionBanner');
+  banner.classList.add('visible');
+  document.getElementById('bannerTitle').textContent = `Simulation Completed: ${n} Vehicles Processed`;
+  document.getElementById('bannerDesc').textContent =
+    `Total Toll Revenue: ₹${currency(SIM.totals.toll)} · Total Violations & Fines: ₹${currency(SIM.totals.fine)} · Exempt/Emergency Vehicles: ${SIM.totals.exemptPassed} · Toll-Free via Wait Limit: ${SIM.totals.freeWaitCount}.`;
+
+  renderAuditTable();
+  renderSummaryTable();
+  renderLiveLaneMonitor(null);
+}
+
+function setUIState(state) {
+  const badge = document.getElementById('statusBadge');
+  const runBtn = document.getElementById('runBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const numInput = document.getElementById('numVehiclesInput');
+  const winInput = document.getElementById('arrivalWindowInput');
+  const lanesSelect = document.getElementById('lanesSelect');
+  const locSelect = document.getElementById('locationPresetSelect');
+
+  badge.className = `status-badge ${state.toLowerCase()}`;
+
+  if (state === 'RUNNING') {
+    badge.textContent = 'Simulating...';
+    runBtn.disabled = true;
+    runBtn.textContent = 'Simulating...';
+    pauseBtn.disabled = false;
+    pauseBtn.textContent = '⏸ Pause';
+    numInput.disabled = true;
+    winInput.disabled = true;
+    lanesSelect.disabled = true;
+    locSelect.disabled = true;
+  } else if (state === 'PAUSED') {
+    badge.textContent = 'Paused';
+    runBtn.disabled = false;
+    runBtn.textContent = '▶ Resume';
+    pauseBtn.disabled = false;
+    pauseBtn.textContent = '▶ Resume';
+  } else if (state === 'COMPLETED') {
+    badge.textContent = 'Completed';
+    runBtn.disabled = false;
+    runBtn.textContent = '▶ Rerun Simulation';
+    pauseBtn.disabled = true;
+    pauseBtn.textContent = '⏸ Pause';
+    numInput.disabled = false;
+    winInput.disabled = false;
+    lanesSelect.disabled = false;
+    locSelect.disabled = false;
+  } else {
+    badge.textContent = 'Ready';
+    runBtn.disabled = false;
+    runBtn.textContent = '▶ Run Simulation';
+    pauseBtn.disabled = true;
+    pauseBtn.textContent = '⏸ Pause';
+    numInput.disabled = false;
+    winInput.disabled = false;
+    lanesSelect.disabled = false;
+    locSelect.disabled = false;
+  }
+}
+
+/** ========================================================
+ *  TABLES, SEARCH, AND EXPORT
+ *  ======================================================== */
+function renderAuditTable() {
+  const tbody = document.getElementById('auditTableBody');
+  if (!SIM.rows || SIM.rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:var(--text-dim);padding:24px;">No simulation data. Click "Run Simulation" to start.</td></tr>';
+    updateFilterCounts();
+    return;
+  }
+
+  const query = SIM.searchQuery.toLowerCase().trim();
+  const filter = SIM.activeFilter;
+
+  const filtered = SIM.rows.filter(r => {
+    // Category or outcome filter
+    if (filter === 'paid' && r.toll <= 0) return false;
+    if (filter === 'free' && (!r.outcome.includes('Wait > limit'))) return false;
+    if (filter === 'exempt' && !r.type.exempt) return false;
+    if (filter === 'fined' && r.penalty <= 0) return false;
+
+    // Search query
+    if (query) {
+      const matchId = String(r.id).includes(query);
+      const matchType = r.type.name.toLowerCase().includes(query);
+      const matchLane = `${r.dir} ${r.lane}`.toLowerCase().includes(query);
+      const matchOutcome = r.outcome.toLowerCase().includes(query);
+      if (!matchId && !matchType && !matchLane && !matchOutcome) return false;
+    }
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:var(--text-dim);padding:20px;">No vehicles match the selected filter criteria.</td></tr>';
+    updateFilterCounts();
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(r => {
+    let outcomeClass = 'outcome-paid';
+    if (r.outcome.includes('Fined')) outcomeClass = 'outcome-fined';
+    else if (r.outcome.includes('Exempt')) outcomeClass = 'outcome-exempt';
+    else if (r.outcome.includes('Wait > limit')) outcomeClass = 'outcome-free';
+
+    return `
+      <tr>
+        <td><strong>#${r.id}</strong></td>
+        <td><span style="font-weight:700;color:${r.dir === 'IN' ? '#0284c7' : '#7c3aed'};">${r.dir}</span></td>
+        <td>Lane ${r.lane}</td>
+        <td><span style="display:inline-flex;align-items:center;gap:4px;">${r.type.icon} ${r.type.name}</span></td>
+        <td><span style="font-size:10px;padding:2px 6px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;color:#334155;font-weight:600;">${r.tripType}</span></td>
+        <td>${r.arrivalMin}m</td>
+        <td style="${r.waited > r.type.waitLimit ? 'color:#dc2626;font-weight:700;' : ''}">${r.waited}m</td>
+        <td>${r.visit}m</td>
+        <td><span class="outcome-pill ${outcomeClass}">${r.outcome}</span></td>
+        <td><strong>₹${currency(r.toll)}</strong></td>
+        <td style="${r.penalty > 0 ? 'color:#dc2626;font-weight:700;' : ''}">₹${currency(r.penalty)}</td>
+        <td style="color:var(--text-muted);font-size:10.5px;">${r.penaltyReason}</td>
+        <td>${r.horns}</td>
+        <td><span style="color:${r.pollution === 'Yes' ? '#dc2626;font-weight:700;' : '#64748b'};">${r.pollution}</span></td>
+      </tr>
+    `;
+  }).join('');
+
+  updateFilterCounts();
+}
+
+function updateFilterCounts() {
+  const rows = SIM.rows || [];
+  document.getElementById('filterCountAll').textContent = rows.length;
+  document.getElementById('filterCountPaid').textContent = rows.filter(r => r.toll > 0).length;
+  document.getElementById('filterCountFree').textContent = rows.filter(r => r.outcome.includes('Wait > limit')).length;
+  document.getElementById('filterCountExempt').textContent = rows.filter(r => r.type.exempt).length;
+  document.getElementById('filterCountFined').textContent = rows.filter(r => r.penalty > 0).length;
+}
+
+function renderSummaryTable() {
+  const tbody = document.getElementById('summaryTableBody');
+  tbody.innerHTML = VEHICLE_TYPES.map(t => {
+    const s = SIM.typeSummary[t.key] || { crossed: 0, paid: 0, free: 0, exempt: 0, collected: 0, fines: 0 };
+    return `
+      <tr>
+        <td><strong>${t.icon} ${t.name}</strong></td>
+        <td>${t.exempt ? '<span style="color:#7c3aed;font-weight:700;">Exempt (₹0)</span>' : `₹${currency(t.toll)}`}</td>
+        <td>${t.waitLimit ? `${t.waitLimit} min` : '—'}</td>
+        <td><strong>${s.crossed}</strong></td>
+        <td><span style="color:#059669;font-weight:700;">${s.paid}</span></td>
+        <td><span style="color:#2563eb;font-weight:700;">${s.free}</span></td>
+        <td><span style="color:#7c3aed;font-weight:700;">${s.exempt}</span></td>
+        <td><strong>₹${currency(s.collected)}</strong></td>
+        <td style="${s.fines > 0 ? 'color:#dc2626;font-weight:700;' : ''}">₹${currency(s.fines)}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function exportCsvReport() {
+  if (!SIM.rows || SIM.rows.length === 0) {
+    alert('No simulation audit data to export. Run a simulation first.');
+    return;
+  }
+
+  const headers = [
+    'Vehicle ID',
+    'Direction',
+    'Lane',
+    'Vehicle Category',
+    'Trip Multiplier',
+    'Arrival Minute',
+    'Wait Time (min)',
+    'Service Time (min)',
+    'Outcome',
+    'Toll Paid (INR)',
+    'Penalty (INR)',
+    'Penalty Reason',
+    'Horn Violations',
+    'Pollution Violation'
+  ];
+
+  const csvRows = [headers.join(',')];
+  for (const r of SIM.rows) {
+    csvRows.push([
+      r.id,
+      r.dir,
+      r.lane,
+      `"${r.type.name}"`,
+      r.tripType,
+      r.arrivalMin,
+      r.waited,
+      r.visit,
+      `"${r.outcome}"`,
+      r.toll,
+      r.penalty,
+      `"${r.penaltyReason}"`,
+      r.horns,
+      r.pollution
+    ].join(','));
+  }
+
+  const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', `toll_plaza_simulation_audit_${Date.now()}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+/** ========================================================
+ *  EVENT LISTENERS & APP INITIALIZATION
+ *  ======================================================== */
+function setupEventListeners() {
+  // Primary buttons
+  document.getElementById('runBtn').addEventListener('click', startSimulation);
+  document.getElementById('pauseBtn').addEventListener('click', pauseSimulation);
+  document.getElementById('resetBtn').addEventListener('click', () => resetSimulationState(true));
+  document.getElementById('exportCsvBtn').addEventListener('click', exportCsvReport);
+
+  // Speed selection
+  document.getElementById('speedSelect').addEventListener('change', e => {
+    SIM.speed = Number(e.target.value);
+  });
+
+  // Lanes selection
+  document.getElementById('lanesSelect').addEventListener('change', e => {
+    if (SIM.status === 'RUNNING') {
+      e.target.value = String(LANES_PER_DIRECTION);
+      return;
+    }
+    LANES_PER_DIRECTION = Number(e.target.value);
+    document.getElementById('laneConfigSubtitle').textContent =
+      `${LANES_PER_DIRECTION * 2} Lanes (${LANES_PER_DIRECTION} Inbound + ${LANES_PER_DIRECTION} Outbound) · Real-Time Queuing & Toll Enforcement`;
+    document.getElementById('inboundSummaryBadge').textContent = `${LANES_PER_DIRECTION} Lanes`;
+    document.getElementById('outboundSummaryBadge').textContent = `${LANES_PER_DIRECTION} Lanes`;
+    renderTollPlazaInfrastructure();
+    buildLaneMonitorDOM();
+  });
+
+  // Preset scenarios
+  document.querySelectorAll('.preset-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (SIM.status === 'RUNNING') return;
+      document.querySelectorAll('.preset-chip').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const sc = SCENARIOS[btn.dataset.preset];
+      if (sc) {
+        document.getElementById('numVehiclesInput').value = sc.vehicles;
+        document.getElementById('arrivalWindowInput').value = sc.window;
+        document.getElementById('lanesSelect').value = String(sc.lanes);
+        LANES_PER_DIRECTION = sc.lanes;
+        renderTollPlazaInfrastructure();
+        buildLaneMonitorDOM();
+      }
+    });
+  });
+
+  // Location selector presets
+  document.getElementById('locationPresetSelect').addEventListener('change', e => {
+    const loc = PRESET_LOCATIONS[e.target.value];
+    if (loc) {
+      TOLL_A = { lat: loc.lat, lng: loc.lng };
+      map.flyTo([loc.lat, loc.lng], loc.zoom, { duration: 1.2 });
+      document.getElementById('plazaNameBadge').textContent = `${loc.name} (${LANES_PER_DIRECTION * 2} Lanes)`;
+      document.getElementById('locationCoordsReadout').textContent = `Plaza at ${loc.lat.toFixed(5)}° N, ${loc.lng.toFixed(5)}° E`;
+      renderTollPlazaInfrastructure();
+    }
+  });
+
+  // Select on map button
+  const selectLocBtn = document.getElementById('selectLocationBtn');
+  selectLocBtn.addEventListener('click', () => {
+    if (SIM.status === 'RUNNING') return;
+    selectingLocationOnMap = !selectingLocationOnMap;
+    selectLocBtn.classList.toggle('active', selectingLocationOnMap);
+    selectLocBtn.textContent = selectingLocationOnMap ? '🎯 Click Map to Place' : '🎯 Set on Map';
+  });
+
+  // Recenter map button
+  document.getElementById('recenterBtn').addEventListener('click', () => {
+    map.setView(leafletPoint(TOLL_A), 16);
+  });
+
+  // Map click handler
+  map.on('click', e => {
+    if (!selectingLocationOnMap) return;
+    TOLL_A = { lat: e.latlng.lat, lng: e.latlng.lng };
+    selectingLocationOnMap = false;
+    selectLocBtn.classList.remove('active');
+    selectLocBtn.textContent = '🎯 Set on Map';
+    document.getElementById('locationPresetSelect').value = 'custom';
+    document.getElementById('plazaNameBadge').textContent = `Custom Plaza Location (${LANES_PER_DIRECTION * 2} Lanes)`;
+    document.getElementById('locationCoordsReadout').textContent = `Plaza at ${TOLL_A.lat.toFixed(5)}° N, ${TOLL_A.lng.toFixed(5)}° E`;
+    renderTollPlazaInfrastructure();
+  });
+
+  // Tabs navigation
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      const target = document.getElementById(btn.dataset.tab);
+      if (target) target.classList.add('active');
+    });
+  });
+
+  // Filter chips
+  document.querySelectorAll('.filter-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      SIM.activeFilter = chip.dataset.filter;
+      renderAuditTable();
+    });
+  });
+
+  // Audit search
+  document.getElementById('auditSearchInput').addEventListener('input', e => {
+    SIM.searchQuery = e.target.value;
+    renderAuditTable();
+  });
+
+  // Advanced settings toggle
+  const toggleAdv = document.getElementById('toggleAdvancedBtn');
+  const advBox = document.getElementById('advancedSettingsBox');
+  const advArrow = document.getElementById('advancedArrow');
+  toggleAdv.addEventListener('click', () => {
+    advBox.classList.toggle('open');
+    advArrow.textContent = advBox.classList.contains('open') ? '▾' : '▸';
+  });
+
+  // Mobile view switcher tabs
+  const mobileMapBtn = document.getElementById('mobileTabMap');
+  const mobileDashBtn = document.getElementById('mobileTabDash');
+  const appContainer = document.getElementById('app');
+
+  mobileMapBtn.addEventListener('click', () => {
+    mobileMapBtn.classList.add('active');
+    mobileDashBtn.classList.remove('active');
+    appContainer.classList.remove('view-dashboard');
+    setTimeout(() => map.invalidateSize(), 150);
+  });
+  mobileDashBtn.addEventListener('click', () => {
+    mobileDashBtn.classList.add('active');
+    mobileMapBtn.classList.remove('active');
+    appContainer.classList.add('view-dashboard');
+  });
+
+  // Resizable split pane handle
+  const resizeHandle = document.getElementById('resizeHandle');
+  let isResizing = false;
+
+  const handlePointerDown = e => {
+    if (window.matchMedia('(max-width: 900px)').matches) return;
+    isResizing = true;
+    resizeHandle.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  };
+
+  const handlePointerMove = e => {
+    if (!isResizing) return;
+    const appRect = appContainer.getBoundingClientRect();
+    const minMap = 320;
+    const minPanel = 380;
+    const newWidth = Math.max(minMap, Math.min(e.clientX - appRect.left, appRect.width - minPanel - 8));
+    appContainer.style.setProperty('--map-width', `${newWidth}px`);
+    map.invalidateSize({ pan: false });
+  };
+
+  const handlePointerUp = e => {
+    if (isResizing) {
+      isResizing = false;
+      resizeHandle.releasePointerCapture(e.pointerId);
+    }
+  };
+
+  resizeHandle.addEventListener('pointerdown', handlePointerDown);
+  resizeHandle.addEventListener('pointermove', handlePointerMove);
+  resizeHandle.addEventListener('pointerup', handlePointerUp);
+
+  // Keyboard navigation for resizer
+  resizeHandle.addEventListener('keydown', e => {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      const current = parseFloat(getComputedStyle(appContainer).getPropertyValue('--map-width')) || (window.innerWidth * 0.54);
+      const step = e.key === 'ArrowRight' ? 30 : -30;
+      appContainer.style.setProperty('--map-width', `${current + step}px`);
+      map.invalidateSize({ pan: false });
+    }
+  });
+
+  // Legend bar population
+  const legendBar = document.getElementById('legendBar');
+  legendBar.innerHTML = VEHICLE_TYPES.map(t => `
+    <div class="map-legend-item" style="border-left: 2px solid ${t.color};">
+      <span class="icon">${t.icon}</span>
+      <span>${t.name}</span>
+      <span style="color:#64748b;">(₹${t.exempt ? '0' : t.toll})</span>
+    </div>
+  `).join('');
+}
+
+function initMap() {
+  map = L.map('map', {
+    zoomControl: false
+  }).setView(leafletPoint(TOLL_A), 16);
+
+  L.control.zoom({ position: 'topright' }).addTo(map);
+
+  // High performance OpenStreetMap cartography
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(map);
+
+  staticLayerGroup = L.layerGroup().addTo(map);
+  markerLayerGroup = L.layerGroup().addTo(map);
+
+  renderTollPlazaInfrastructure();
+  buildLaneMonitorDOM();
+  renderSummaryTable();
+  setupEventListeners();
+
+  window.addEventListener('resize', () => {
+    map.invalidateSize();
+  });
+}
+
+// Start on DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+  initMap();
+});
+</script>
+</body>
+</html>

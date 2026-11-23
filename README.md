@@ -1,6 +1,5 @@
 # Toll-Booth Operations & Traffic Simulation System
 
-[![Deployment: Netlify](https://img.shields.io/badge/Deployment-Netlify_Ready-00C7B7?logo=netlify&logoColor=white)](https://your-toll-plaza-simulation.netlify.app)
 [![Tech: HTML5 / CSS3 / ES6](https://img.shields.io/badge/Stack-Vanilla_HTML5_%2F_CSS3_%2F_ES6-E34F26?logo=html5&logoColor=white)](#technologies)
 [![Map: Leaflet / OpenStreetMap](https://img.shields.io/badge/GIS-Leaflet_%2B_OpenStreetMap-199900?logo=leaflet&logoColor=white)](https://leafletjs.com/)
 [![Academic: B.Sc. CS Practical](https://img.shields.io/badge/Academic-B.Sc._CS_Semester_V-4F46E5)](#academic-origin--enhancement-history)
